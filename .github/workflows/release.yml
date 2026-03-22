@@ -1,0 +1,126 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'   # 觸發條件：push 任何 v* tag，例如 v1.0.0
+
+jobs:
+  build-all:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            name: linux
+            client_bin: netcommand-client
+            shell: bash
+          - os: macos-14
+            name: macos
+            client_bin: netcommand-client
+            shell: bash
+          - os: windows-2022
+            name: windows
+            client_bin: netcommand-client.exe
+            shell: msys2
+
+    name: Build ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── MSYS2 setup（Windows only）──────────────────
+      - name: Set up MSYS2
+        if: matrix.name == 'windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: mingw-w64-x86_64-gcc make curl
+
+      # ── Linux deps ────────────────────────────────
+      - name: Install Linux deps
+        if: matrix.name == 'linux'
+        run: sudo apt-get update -qq && sudo apt-get install -y g++ make libx11-dev libxtst-dev curl
+
+      # ── Download stb ──────────────────────────────
+      - name: Download stb_image_write.h
+        run: curl -sL https://raw.githubusercontent.com/nothings/stb/master/stb_image_write.h -o client/stb_image_write.h
+        shell: bash
+
+      # ── Build client ──────────────────────────────
+      - name: Build client (Linux/macOS)
+        if: matrix.name != 'windows'
+        run: cd client && make -j$(nproc 2>/dev/null || sysctl -n hw.logicalcpu)
+
+      - name: Build client (Windows)
+        if: matrix.name == 'windows'
+        shell: msys2 {0}
+        run: cd client && make -j$(nproc)
+
+      # ── Package ───────────────────────────────────
+      - name: Package
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp client/${{ matrix.client_bin }} dist/
+          cp deploy-client.sh dist/ 2>/dev/null || true
+          cp deploy-client.bat dist/ 2>/dev/null || true
+          cp README.md dist/
+          cd dist
+          if [ "${{ matrix.name }}" = "windows" ]; then
+            7z a ../netcommand-${{ matrix.name }}.zip .
+          else
+            tar czf ../netcommand-${{ matrix.name }}.tar.gz .
+          fi
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.name }}
+          path: netcommand-${{ matrix.name }}.*
+
+  # ── Create GitHub Release ─────────────────────────────
+  release:
+    needs: build-all
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: release-*
+          merge-multiple: true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: NetCommand ${{ github.ref_name }}
+          body: |
+            ## NetCommand ${{ github.ref_name }}
+
+            ### 下載
+            | 平台 | 檔案 |
+            |------|------|
+            | Linux | `netcommand-linux.tar.gz` |
+            | macOS | `netcommand-macos.tar.gz` |
+            | Windows | `netcommand-windows.zip` |
+
+            ### 安裝 Client
+            ```bash
+            # Linux / macOS
+            tar xzf netcommand-<platform>.tar.gz
+            sudo ./deploy-client.sh <server-ip>
+
+            # Windows（以系統管理員執行）
+            deploy-client.bat <server-ip>
+            ```
+
+            查看 [README](https://github.com/${{ github.repository }}/blob/main/README.md) 取得完整說明。
+          files: artifacts/*
+          draft: false
+          prerelease: false

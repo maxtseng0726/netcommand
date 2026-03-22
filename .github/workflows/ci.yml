@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # ── Linux build ───────────────────────────────────────
+  build-linux:
+    name: Client — Linux (g++)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y g++ make libx11-dev libxtst-dev curl
+
+      - name: Download stb_image_write.h
+        run: |
+          curl -sL https://raw.githubusercontent.com/nothings/stb/master/stb_image_write.h \
+               -o client/stb_image_write.h
+
+      - name: Build client
+        run: |
+          cd client
+          make -j$(nproc)
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: netcommand-client-linux
+          path: client/netcommand-client
+
+  # ── macOS build ───────────────────────────────────────
+  build-macos:
+    name: Client — macOS (clang++)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download stb_image_write.h
+        run: |
+          curl -sL https://raw.githubusercontent.com/nothings/stb/master/stb_image_write.h \
+               -o client/stb_image_write.h
+
+      - name: Build client
+        run: |
+          cd client
+          make -j$(sysctl -n hw.logicalcpu)
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: netcommand-client-macos
+          path: client/netcommand-client
+
+  # ── Windows build ─────────────────────────────────────
+  build-windows:
+    name: Client — Windows (MinGW)
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up MSYS2 + MinGW-w64
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            make
+            curl
+
+      - name: Download stb_image_write.h
+        run: |
+          curl -sL https://raw.githubusercontent.com/nothings/stb/master/stb_image_write.h \
+               -o client/stb_image_write.h
+
+      - name: Build client
+        run: |
+          cd client
+          make -j$(nproc)
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: netcommand-client-windows
+          path: client/netcommand-client.exe
+
+  # ── Admin (Qt) — Linux only in CI ────────────────────
+  build-admin-linux:
+    name: Admin — Linux (Qt6)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt6 + build tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y \
+            qt6-base-dev qt6-base-dev-tools \
+            libqt6network6 \
+            make g++
+
+      - name: Build admin
+        run: |
+          cd admin
+          qmake6 netcommand-admin.pro
+          make -j$(nproc)
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: netcommand-admin-linux
+          path: admin/netcommand-admin

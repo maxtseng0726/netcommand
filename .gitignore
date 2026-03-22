@@ -1,0 +1,50 @@
+# ── Build outputs ─────────────────────────────────────
+*.o
+*.obj
+*.exe
+*.out
+*.a
+*.lib
+*.dll
+*.so
+*.dylib
+
+# Compiled binaries
+netcommand-client
+netcommand-admin
+netcommand-client.exe
+netcommand-admin.exe
+
+# ── Qt build artifacts ────────────────────────────────
+Makefile.qmake
+moc_*.cpp
+moc_*.h
+ui_*.h
+qrc_*.cpp
+.qmake.stash
+*.pro.user
+*.pro.user.*
+
+# ── Third-party headers (auto-downloaded) ────────────
+client/stb_image_write.h
+
+# ── Deploy artifacts ──────────────────────────────────
+dist/
+*.tar.gz
+*.zip
+
+# ── OS generated ──────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+Desktop.ini
+
+# ── Editor / IDE ──────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~

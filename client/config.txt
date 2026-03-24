@@ -1,0 +1,13 @@
+# NetCommand Client — Configuration
+# ─────────────────────────────────────────────────────────
+# Place this file in the same directory as the client binary.
+# Edit server_ip to point at the machine running the Admin GUI,
+# then double-click / run the client binary once to install it
+# as a system service. It will connect silently on every boot.
+# ─────────────────────────────────────────────────────────
+
+# IP address of the Admin machine (required)
+server_ip = 192.168.1.100
+
+# TCP port — must match the port set in the Admin GUI (default 7890)
+port = 7890

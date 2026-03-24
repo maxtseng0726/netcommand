@@ -1,88 +1,185 @@
 name: Release
 
+# Trigger: push any tag like v1.0.0
 on:
   push:
     tags:
-      - 'v*'   # 觸發條件：push 任何 v* tag，例如 v1.0.0
+      - 'v*'
 
 jobs:
-  build-all:
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-22.04
-            name: linux
-            client_bin: netcommand-client
-            shell: bash
-          - os: macos-14
-            name: macos
-            client_bin: netcommand-client
-            shell: bash
-          - os: windows-2022
-            name: windows
-            client_bin: netcommand-client.exe
-            shell: msys2
-
-    name: Build ${{ matrix.name }}
-    runs-on: ${{ matrix.os }}
-
+  # ── Admin — Linux ─────────────────────────────────────────
+  build-admin-linux:
+    name: Admin — Linux (Qt6)
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
 
-      # ── MSYS2 setup（Windows only）──────────────────
-      - name: Set up MSYS2
-        if: matrix.name == 'windows'
-        uses: msys2/setup-msys2@v2
+      - name: Install Qt6
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y qt6-base-dev qt6-base-dev-tools make g++
+
+      - name: Build
+        run: |
+          cd admin
+          qmake6 netcommand-admin.pro
+          make -j$(nproc)
+
+      - name: Package
+        run: |
+          mkdir dist
+          cp admin/netcommand-admin dist/
+          cp README.md dist/
+          tar czf netcommand-admin-linux.tar.gz -C dist .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: admin-linux
+          path: netcommand-admin-linux.tar.gz
+
+  # ── Client — Linux ────────────────────────────────────────
+  build-client-linux:
+    name: Client — Linux (g++)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y g++ make libx11-dev libxtst-dev curl
+
+      - name: Download stb
+        run: |
+          curl -sL https://raw.githubusercontent.com/nothings/stb/master/stb_image_write.h \
+               -o client/stb_image_write.h
+
+      - name: Build
+        run: cd client && make -j$(nproc)
+
+      - name: Package
+        run: |
+          mkdir dist
+          cp client/netcommand-client dist/
+          cp client/config.txt        dist/
+          cp README.md                dist/
+          cat > dist/INSTALL.txt << 'EOF'
+NetCommand Client — Linux
+==========================
+1. Edit config.txt  →  set server_ip to your Admin machine's IP.
+2. Run:  sudo ./netcommand-client
+   Installs as a systemd service and starts immediately.
+   Auto-starts on every boot.
+
+To remove:
+   sudo ./netcommand-client --uninstall
+EOF
+          tar czf netcommand-client-linux.tar.gz -C dist .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: client-linux
+          path: netcommand-client-linux.tar.gz
+
+  # ── Client — macOS ────────────────────────────────────────
+  build-client-macos:
+    name: Client — macOS (clang++)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download stb
+        run: |
+          curl -sL https://raw.githubusercontent.com/nothings/stb/master/stb_image_write.h \
+               -o client/stb_image_write.h
+
+      - name: Build
+        run: cd client && make CXX=clang++ -j$(sysctl -n hw.logicalcpu)
+
+      - name: Package
+        run: |
+          mkdir dist
+          cp client/netcommand-client dist/
+          cp client/config.txt        dist/
+          cp README.md                dist/
+          cat > dist/INSTALL.txt << 'EOF'
+NetCommand Client — macOS
+==========================
+1. Edit config.txt  →  set server_ip to your Admin machine's IP.
+2. Run:  sudo ./netcommand-client
+   Installs as a launchd daemon and starts immediately.
+   Auto-starts on every boot.
+
+Permission note: grant Accessibility access in
+  System Settings → Privacy & Security → Accessibility.
+
+To remove:
+   sudo ./netcommand-client --uninstall
+EOF
+          tar czf netcommand-client-macos.tar.gz -C dist .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: client-macos
+          path: netcommand-client-macos.tar.gz
+
+  # ── Client — Windows ──────────────────────────────────────
+  build-client-windows:
+    name: Client — Windows (MinGW)
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
           update: true
           install: mingw-w64-x86_64-gcc make curl
 
-      # ── Linux deps ────────────────────────────────
-      - name: Install Linux deps
-        if: matrix.name == 'linux'
-        run: sudo apt-get update -qq && sudo apt-get install -y g++ make libx11-dev libxtst-dev curl
+      - name: Download stb
+        run: |
+          curl -sL https://raw.githubusercontent.com/nothings/stb/master/stb_image_write.h \
+               -o client/stb_image_write.h
 
-      # ── Download stb ──────────────────────────────
-      - name: Download stb_image_write.h
-        run: curl -sL https://raw.githubusercontent.com/nothings/stb/master/stb_image_write.h -o client/stb_image_write.h
-        shell: bash
-
-      # ── Build client ──────────────────────────────
-      - name: Build client (Linux/macOS)
-        if: matrix.name != 'windows'
-        run: cd client && make -j$(nproc 2>/dev/null || sysctl -n hw.logicalcpu)
-
-      - name: Build client (Windows)
-        if: matrix.name == 'windows'
-        shell: msys2 {0}
+      - name: Build
         run: cd client && make -j$(nproc)
 
-      # ── Package ───────────────────────────────────
       - name: Package
-        shell: bash
+        shell: pwsh
         run: |
-          mkdir -p dist
-          cp client/${{ matrix.client_bin }} dist/
-          cp deploy-client.sh dist/ 2>/dev/null || true
-          cp deploy-client.bat dist/ 2>/dev/null || true
-          cp README.md dist/
-          cd dist
-          if [ "${{ matrix.name }}" = "windows" ]; then
-            7z a ../netcommand-${{ matrix.name }}.zip .
-          else
-            tar czf ../netcommand-${{ matrix.name }}.tar.gz .
-          fi
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item client\netcommand-client.exe dist\
+          Copy-Item client\config.txt            dist\
+          Copy-Item README.md                    dist\
+          @"
+NetCommand Client - Windows
+=============================
+1. Edit config.txt  -  set server_ip to your Admin machine's IP.
+2. Right-click netcommand-client.exe -> Run as Administrator.
+   Installs as a Windows Service and connects silently.
+   Auto-starts on every boot.
 
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+To remove the service:
+   netcommand-client.exe --uninstall
+"@ | Out-File -FilePath dist\INSTALL.txt -Encoding UTF8
+          Compress-Archive -Path dist\* -DestinationPath netcommand-client-windows.zip
+
+      - uses: actions/upload-artifact@v4
         with:
-          name: release-${{ matrix.name }}
-          path: netcommand-${{ matrix.name }}.*
+          name: client-windows
+          path: netcommand-client-windows.zip
 
-  # ── Create GitHub Release ─────────────────────────────
-  release:
-    needs: build-all
+  # ── Publish GitHub Release ────────────────────────────────
+  publish:
+    name: Publish Release
+    needs:
+      - build-admin-linux
+      - build-client-linux
+      - build-client-macos
+      - build-client-windows
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -93,34 +190,43 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: artifacts
-          pattern: release-*
           merge-multiple: true
 
-      - name: Create Release
+      - name: Publish
         uses: softprops/action-gh-release@v2
         with:
-          name: NetCommand ${{ github.ref_name }}
+          name: "NetCommand ${{ github.ref_name }}"
           body: |
             ## NetCommand ${{ github.ref_name }}
 
-            ### 下載
-            | 平台 | 檔案 |
-            |------|------|
-            | Linux | `netcommand-linux.tar.gz` |
-            | macOS | `netcommand-macos.tar.gz` |
-            | Windows | `netcommand-windows.zip` |
+            ### How to use
 
-            ### 安裝 Client
-            ```bash
-            # Linux / macOS
-            tar xzf netcommand-<platform>.tar.gz
-            sudo ./deploy-client.sh <server-ip>
+            **Admin** — download the Admin package, extract, run `netcommand-admin`, click Start Server.
 
-            # Windows（以系統管理員執行）
-            deploy-client.bat <server-ip>
-            ```
+            **Client (target machines)**
+            1. Download the Client package for the target platform.
+            2. Extract and edit `config.txt` — set `server_ip` to your Admin machine's LAN IP.
+            3. Run the binary once (as Administrator / sudo on first run).
+               It silently installs itself as a system service and auto-starts on every boot.
 
-            查看 [README](https://github.com/${{ github.repository }}/blob/main/README.md) 取得完整說明。
-          files: artifacts/*
+            ---
+
+            ### Downloads
+
+            | File | Platform | Description |
+            |------|----------|-------------|
+            | `netcommand-admin-linux.tar.gz` | Linux | Admin GUI |
+            | `netcommand-client-linux.tar.gz` | Linux | Client daemon |
+            | `netcommand-client-macos.tar.gz` | macOS | Client daemon |
+            | `netcommand-client-windows.zip` | Windows | Client .exe |
+
+            Each client package contains: binary + `config.txt` + `INSTALL.txt` + `README.md`
+
+            > ⚠️ For use only on networks and devices you own or administer.
+          files: |
+            artifacts/netcommand-admin-linux.tar.gz
+            artifacts/netcommand-client-linux.tar.gz
+            artifacts/netcommand-client-macos.tar.gz
+            artifacts/netcommand-client-windows.zip
           draft: false
           prerelease: false

@@ -7,14 +7,18 @@
 //        netcommand-client --install <server-ip> [port] (install as service)
 //        netcommand-client --uninstall                  (remove service)
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdint.h>
+// ── Standard library — must come before platform headers ─
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <cstdint>
+#include <string>
+#include <vector>
 #include <thread>
 #include <atomic>
 #include <chrono>
 
+// ── Platform headers ──────────────────────────────────────
 #ifdef _WIN32
 #  define WIN32_LEAN_AND_MEAN
 #  include <windows.h>
@@ -27,30 +31,31 @@
 #else
 #  include <unistd.h>
 #  include <signal.h>
+#  include <sys/stat.h>    // chmod
    static void daemonize() {
        pid_t pid = fork();
        if (pid < 0) exit(EXIT_FAILURE);
-       if (pid > 0) exit(EXIT_SUCCESS);   // parent exits
+       if (pid > 0) exit(EXIT_SUCCESS);
        setsid();
-       // redirect stdio
-       freopen("/dev/null", "r", stdin);
-       freopen("/dev/null", "w", stdout);
-       freopen("/dev/null", "w", stderr);
+       (void)freopen("/dev/null", "r", stdin);
+       (void)freopen("/dev/null", "w", stdout);
+       (void)freopen("/dev/null", "w", stderr);
    }
 #  if defined(__APPLE__)
 #    include <CoreFoundation/CoreFoundation.h>
+#    include <CoreGraphics/CoreGraphics.h>    // CGDirectDisplayID, CGMainDisplayID
+#    include <mach-o/dyld.h>                 // _NSGetExecutablePath
      static void show_message(const char* msg) {
-         // Use osascript to show a notification
          char cmd[512];
          snprintf(cmd, sizeof(cmd),
              "osascript -e 'display notification \"%s\" with title \"NetCommand\"'", msg);
-         system(cmd);
+         (void)system(cmd);
      }
 #  else
      static void show_message(const char* msg) {
          char cmd[512];
          snprintf(cmd, sizeof(cmd), "notify-send 'NetCommand' '%s' &", msg);
-         system(cmd);
+         (void)system(cmd);
      }
 #  endif
 #endif
@@ -427,8 +432,3 @@ int main(int argc, char* argv[])
     return 0;
 }
 #endif  // _WIN32
-
-#include <vector>
-#if defined(__APPLE__)
-#  include <mach-o/dyld.h>  // _NSGetExecutablePath
-#endif

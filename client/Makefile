@@ -8,34 +8,41 @@
 #    make clean
 # ─────────────────────────────────────────────────────
 
-CXX      := g++
-CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -I../common -I.
+# Base flags — suppress known harmless warnings from stb_image_write.h
+CXXFLAGS_BASE := -std=c++17 -O2 -Wall -Wextra \
+                 -Wno-missing-field-initializers \
+                 -Wno-unused-function \
+                 -I../common -I.
 
 # ── Platform detection ────────────────────────────────
 UNAME := $(shell uname -s 2>/dev/null || echo Windows)
 
 ifeq ($(UNAME), Linux)
+  CXX       := g++
   PLATFORM  := linux
   TARGET    := netcommand-client
-  CXXFLAGS  += -DLINUX
+  CXXFLAGS  := $(CXXFLAGS_BASE) -DLINUX -Wno-unused-result
   LDFLAGS   := -lpthread -lX11 -lXtst
-  # stb_image_write is header-only; libjpeg optional (using stb)
   SRCS      := main.cpp screencapture.cpp inputinjector.cpp
 endif
 
 ifeq ($(UNAME), Darwin)
+  CXX       := clang++
   PLATFORM  := macos
   TARGET    := netcommand-client
-  CXXFLAGS  += -DMACOS
-  LDFLAGS   := -framework CoreGraphics -framework ApplicationServices \
-               -framework CoreFoundation -lpthread
+  CXXFLAGS  := $(CXXFLAGS_BASE) -DMACOS \
+               -Wno-deprecated-declarations
+  LDFLAGS   := -framework CoreGraphics \
+               -framework CoreFoundation \
+               -framework ApplicationServices \
+               -lpthread
   SRCS      := main.cpp screencapture.cpp inputinjector.cpp
 endif
 
 ifeq ($(PLATFORM), windows)
   CXX       := x86_64-w64-mingw32-g++
   TARGET    := netcommand-client.exe
-  CXXFLAGS  += -DWINDOWS -mwindows
+  CXXFLAGS  := $(CXXFLAGS_BASE) -DWINDOWS -mwindows
   LDFLAGS   := -lws2_32 -lgdi32 -lpthread
   SRCS      := main.cpp screencapture.cpp inputinjector.cpp
 endif

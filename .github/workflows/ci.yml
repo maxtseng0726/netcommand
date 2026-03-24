@@ -50,7 +50,7 @@ jobs:
       - name: Build client
         run: |
           cd client
-          make -j$(sysctl -n hw.logicalcpu)
+          make CXX=clang++ -j$(sysctl -n hw.logicalcpu)
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
